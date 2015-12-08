@@ -1,0 +1,7 @@
+{
+    "RedisAddress": "127.0.0.1:6379",
+    "RedisPassword": "",
+    "RedisDb": 0,
+    "NounsPath": "/srv/data/nouns.txt",
+    "TelegramBotTokenEnv": "TELEGRAM_BOT_TOKEN"
+}
