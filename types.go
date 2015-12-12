@@ -6,7 +6,7 @@ import (
 )
 
 type Noun struct {
-	Id          int
+	ID          int
 	Article     string
 	Noun        string
 	Translation string
@@ -15,21 +15,21 @@ type Noun struct {
 type UserState struct {
 	channel chan tgbotapi.Message
 	quit    chan int
-	UserId  int
+	UserID  int
 }
 
-func (self *Noun) getIdString() string {
-	return fmt.Sprintf("noun:%d", self.Id)
+func (noun *Noun) getIDString() string {
+	return fmt.Sprintf("noun:%d", noun.ID)
 }
 
-func getNounIdKey(id int) string {
+func getNounIDKey(id int) string {
 	return fmt.Sprintf("noun:%d", id)
 }
 
-func (self *UserState) getIdString() string {
-	return fmt.Sprintf("user:%d", self.UserId)
+func (state *UserState) getIDString() string {
+	return fmt.Sprintf("user:%d", state.UserID)
 }
 
-func getUserIdKey(id int) string {
+func getUserIDKey(id int) string {
 	return fmt.Sprintf("user:%d", id)
 }

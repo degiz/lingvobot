@@ -3,5 +3,7 @@
     "RedisPassword": "",
     "RedisDb": 0,
     "NounsPath": "/srv/data/nouns.txt",
-    "TelegramBotTokenEnv": "TELEGRAM_BOT_TOKEN"
+    "TelegramBotTokenEnv": "TELEGRAM_BOT_TOKEN",
+    "IvonaAccessKeyEnv": "IVONA_ACCESS_KEY",
+    "IvonaSecretKeyEnv": "IVONA_SECRET_KEY"
 }

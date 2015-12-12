@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Syfaro/telegram-bot-api"
+	ivona "github.com/jpadilla/ivona-go"
 	"gopkg.in/redis.v3"
 	"io"
 	"log"
@@ -13,105 +14,110 @@ import (
 )
 
 type Contols struct {
-	redis        *redis.Client
-	telegram_bot *tgbotapi.BotAPI
-	noun_keys    []int
+	redis       *redis.Client
+	telegramBot *tgbotapi.BotAPI
+	ivona       *ivona.Ivona
+	nounKeys    []int
 }
 
 type Bot struct {
-	config_file         string
-	config              *Config
-	controls            *Contols
-	active_users_states map[int]*UserState
+	configFile        string
+	config            *Config
+	controls          *Contols
+	activeUsersStates map[int]*UserState
 }
 
 // TODO: read messages from config
 const (
-	stop_command = "/stop"
+	stopCommand = "/stop"
 )
 
-func (self *Bot) Run() error {
+func (bot *Bot) Run() error {
 
-	var config_err error
-	self.config, config_err = getConfig(self.config_file)
-	if config_err != nil {
-		panic(fmt.Sprintf("Failed to read config: %v", config_err))
+	var configErr error
+	bot.config, configErr = getConfig(bot.configFile)
+	if configErr != nil {
+		panic(fmt.Sprintf("Failed to read config: %v", configErr))
 	}
 
-	self.controls = &Contols{}
+	bot.controls = &Contols{}
 
-	err := self.setUpRedis()
+	err := bot.setUpRedis()
 	if err != nil {
 		panic(fmt.Sprintf("Redis init failed: %v", err))
 	}
 
-	err = self.loadWords()
+	err = bot.loadWords()
 	if err != nil {
 		panic(fmt.Sprintf("Loading words failed: %v", err))
 	}
 
-	err = self.setUpTelegramBot()
+	err = bot.setUpTelegramBot()
 	if err != nil {
 		panic(fmt.Sprintf("Telegram bot init failed: %v", err))
 	}
 
-	self.active_users_states = make(map[int]*UserState)
+	err = bot.setUpTTS()
+	if err != nil {
+		panic(fmt.Sprintf("TTS init failed: %v", err))
+	}
+
+	bot.activeUsersStates = make(map[int]*UserState)
 
 	// TODO: save the offset
 	// TODO: read timeout from config
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 1
 
-	updates, _ := self.controls.telegram_bot.GetUpdatesChan(u)
+	updates, _ := bot.controls.telegramBot.GetUpdatesChan(u)
 
 	for update := range updates {
-		self.processUpdate(update)
+		bot.processUpdate(update)
 	}
 
 	return nil
 }
 
-func (self *Bot) setUpRedis() error {
+func (bot *Bot) setUpRedis() error {
 
 	var err error
 	attempts := 10
 
 	for attempts > 0 {
-		self.controls.redis = redis.NewClient(&redis.Options{
-			Addr:     self.config.RedisAddress,
-			Password: self.config.RedisPassword,
-			DB:       self.config.RedisDb,
+		bot.controls.redis = redis.NewClient(&redis.Options{
+			Addr:     bot.config.RedisAddress,
+			Password: bot.config.RedisPassword,
+			DB:       bot.config.RedisDb,
 		})
 
-		_, err = self.controls.redis.Ping().Result()
+		_, err = bot.controls.redis.Ping().Result()
 		if err != nil {
 			log.Printf("Retrying to connect to redis..")
 			time.Sleep(1 * time.Second)
 		} else {
 			break
 		}
-		attempts -= 1
+		attempts--
 	}
 
 	return err
 }
 
-func (self *Bot) loadWords() error {
-	// TODO: read path from config
-	nouns, err := readNounsFromFile(self.config.NounsPath)
+func (bot *Bot) loadWords() error {
+	nouns, err := readNounsFromFile(bot.config.NounsPath)
 	if err != nil {
 		return err
 	}
-	self.controls.noun_keys = make([]int, 0, len(nouns))
+	bot.controls.nounKeys = make([]int, 0, len(nouns))
 
 	// Populate redis with nouns
 	for _, noun := range nouns {
-		self.controls.noun_keys = append(self.controls.noun_keys, noun.Id)
-		json_noun, err := json.Marshal(noun)
+		bot.controls.nounKeys = append(bot.controls.nounKeys, noun.ID)
+		jsonNoun, err := json.Marshal(noun)
 		if err != nil {
 			return err
 		}
-		self.controls.redis.Set(noun.getIdString(), json_noun, 0)
+		bot.controls.redis.Set(noun.getIDString(), jsonNoun, 0)
 	}
 
 	return nil
@@ -141,21 +147,21 @@ func readNounsFromFile(filename string) (map[int]*Noun, error) {
 
 		noun := &Noun{}
 
-		noun.Id = id
+		noun.ID = id
 		noun.Translation = row[0]
 		noun.Article = row[1]
 		noun.Noun = row[2]
 
 		nouns[id] = noun
-		id += 1
+		id++
 	}
 
 	return nouns, nil
 }
 
-func (self *Bot) setUpTelegramBot() error {
+func (bot *Bot) setUpTelegramBot() error {
 	var err error
-	self.controls.telegram_bot, err = tgbotapi.NewBotAPI(self.config.TelegramBotToken)
+	bot.controls.telegramBot, err = tgbotapi.NewBotAPI(bot.config.TelegramBotToken)
 	if err != nil {
 		return err
 	}
@@ -163,21 +169,28 @@ func (self *Bot) setUpTelegramBot() error {
 	return nil
 }
 
-func (self *Bot) processUpdate(update tgbotapi.Update) error {
+func (bot *Bot) setUpTTS() error {
+	bot.controls.ivona = ivona.New(
+		bot.config.IvonaAccessKeyToken,
+		bot.config.IvonaSecretKeyToken)
+	return nil
+}
 
-	user_id := update.Message.From.ID
+func (bot *Bot) processUpdate(update tgbotapi.Update) error {
 
-	if _, ok := self.active_users_states[user_id]; !ok {
-		err := self.ProcessNewUser(user_id, update.Message.Chat.ID)
+	userID := update.Message.From.ID
+
+	if _, ok := bot.activeUsersStates[userID]; !ok {
+		err := bot.ProcessNewUser(userID, update.Message.Chat.ID)
 		if err != nil {
 			panic(fmt.Sprintf("Failed processing new user: %v", err))
 		}
 	}
 
-	self.active_users_states[user_id].channel <- update.Message
+	bot.activeUsersStates[userID].channel <- update.Message
 
-	if update.Message.Text == stop_command {
-		err := self.RemoveUser(user_id)
+	if update.Message.Text == stopCommand {
+		err := bot.RemoveUser(userID)
 		if err != nil {
 			panic(fmt.Sprintf("Failed removing user: %v", err))
 		}
@@ -186,27 +199,27 @@ func (self *Bot) processUpdate(update tgbotapi.Update) error {
 	return nil
 }
 
-func (self *Bot) ProcessNewUser(user_id int, chat_id int) error {
+func (bot *Bot) ProcessNewUser(userID int, chatID int) error {
 
-	log.Printf("Processing new user with id: %d", user_id)
-	user_state := &UserState{}
-	user_state.channel = make(chan tgbotapi.Message)
-	user_state.quit = make(chan int)
-	user_state.UserId = user_id
+	log.Printf("Processing new user with id: %d", userID)
+	userState := &UserState{}
+	userState.channel = make(chan tgbotapi.Message)
+	userState.quit = make(chan int)
+	userState.UserID = userID
 
-	self.active_users_states[user_id] = user_state
+	bot.activeUsersStates[userID] = userState
 
-	job := &UserJob{state: user_state, controls: self.controls, chat_id: chat_id}
+	job := &UserJob{state: userState, controls: bot.controls, chatID: chatID}
 	go job.Start()
 
 	return nil
 }
 
-func (self *Bot) RemoveUser(user_id int) error {
+func (bot *Bot) RemoveUser(userID int) error {
 
-	log.Printf("Removing user with id: %d", user_id)
-	self.active_users_states[user_id].quit <- 1
-	delete(self.active_users_states, user_id)
+	log.Printf("Removing user with id: %d", userID)
+	bot.activeUsersStates[userID].quit <- 1
+	delete(bot.activeUsersStates, userID)
 
 	return nil
 }

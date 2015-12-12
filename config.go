@@ -11,6 +11,10 @@ type Config struct {
 	RedisDb             int64
 	NounsPath           string
 	TelegramBotTokenEnv string
+	IvonaAccessKeyEnv   string
+	IvonaAccessKeyToken string
+	IvonaSecretKeyEnv   string
+	IvonaSecretKeyToken string
 	TelegramBotToken    string
 }
 
@@ -25,12 +29,14 @@ func getConfig(filepath string) (*Config, error) {
 
 	config := &Config{}
 	decoder := json.NewDecoder(file)
-	err_dec := decoder.Decode(config)
-	if err_dec != nil {
-		return nil, err_dec
+	errDec := decoder.Decode(config)
+	if errDec != nil {
+		return nil, errDec
 	}
 
 	config.TelegramBotToken = os.Getenv(config.TelegramBotTokenEnv)
+	config.IvonaAccessKeyToken = os.Getenv(config.IvonaAccessKeyEnv)
+	config.IvonaSecretKeyToken = os.Getenv(config.IvonaSecretKeyEnv)
 
 	return config, nil
 }
