@@ -14,40 +14,54 @@ import (
 const (
 	helpMessage = `Hey there, I'm Lingvo Bot
 Here are my commands:
-/start is posting you words
-/stop stops posting
-/go asks you questions
-/audio send you pronunciation
+/train starts nouns training
+/audio sends you pronunciation
+/noun sends you noun info
+/verb sends you verb info
 /help prints this message
 Enjoy!`
 
-	stopMessage = `Ok, no more words.
-Press /start to begin again!`
+	trainingMessage = `Here are training commands:
+/start starts training
+/check checks your knowledges
+/stop stops training`
+
+	stopMessage = "Ok, no more words!"
 
 	audioMessage = "Ok, your next message will be traslated into the audio file!"
 
-	readyMessage     = "Press /go once you're ready"
+	nounMessage = "Ok, send me noun you'd like to learn!"
+
+	noNounMessage = "Sorry, didn't find anything.."
+
+	verbMessage = "Sorry, verbs are not yet implemented.."
+
+	readyMessage     = "Press /check once you're ready"
 	correctMessage   = "Genau!"
 	incorrectMessage = "Nein :("
 )
 
 const (
-	waitingForStart  = iota
-	waitingForGo     = iota
-	waitingForAnswer = iota
-	waitingForAudio  = iota
+	waitingForAnything = iota
+	waitingForStart    = iota
+	waitingForCheck    = iota
+	waitingForAnswer   = iota
+	waitingForAudio    = iota
+	waitingForNoun     = iota
 )
 
 type UserJob struct {
-	state            *UserState
-	controls         *Contols
-	chatID           int
-	currentNouns     []Noun
-	currentWordID    int
-	numOfQuestions   int
-	keyboard         tgbotapi.ReplyKeyboardMarkup
-	waitingState     int
-	prevWaitingState int
+	state              *UserState
+	controls           *Contols
+	chatID             int
+	modeChoiceKeyboard tgbotapi.ReplyKeyboardMarkup
+	keyboard           tgbotapi.ReplyKeyboardMarkup
+	waitingState       int
+
+	// training mode variables
+	currentNouns   []Noun
+	currentWordID  int
+	numOfQuestions int
 }
 
 func (job *UserJob) Start() {
@@ -73,15 +87,20 @@ func (job *UserJob) Start() {
 
 func (job *UserJob) init() {
 	job.numOfQuestions = 3
+
+	job.modeChoiceKeyboard = tgbotapi.ReplyKeyboardMarkup{}
+	buttons := [][]string{[]string{"/noun", "/audio"}, []string{"/verb", "/train"}}
+	job.modeChoiceKeyboard.OneTimeKeyboard = true
+	job.modeChoiceKeyboard.ResizeKeyboard = true
+	job.modeChoiceKeyboard.Keyboard = buttons
+
 	job.keyboard = tgbotapi.ReplyKeyboardMarkup{}
-
-	buttons := [][]string{[]string{"der", "die"}, []string{"das", "die (pl)"}}
-
+	buttons = [][]string{[]string{"der", "die"}, []string{"das", "die (pl)"}}
 	job.keyboard.OneTimeKeyboard = true
 	job.keyboard.ResizeKeyboard = true
 	job.keyboard.Keyboard = buttons
 
-	job.waitingState = waitingForStart
+	job.waitingState = waitingForAnything
 }
 
 func (job *UserJob) ProcessMessage(message string) {
@@ -90,14 +109,31 @@ func (job *UserJob) ProcessMessage(message string) {
 	case "/help":
 		job.SendMessage(helpMessage)
 		return
-	case "/stop":
-		job.SendMessage(stopMessage)
+	case "/train":
+		job.SendMessage(trainingMessage)
+		job.waitingState = waitingForStart
+		return
+	case "/noun":
+		job.SendMessage(nounMessage)
+		job.waitingState = waitingForNoun
 		return
 	case "/audio":
 		job.SendMessage(audioMessage)
-		job.SaveWaitingState()
 		job.waitingState = waitingForAudio
 		return
+	case "/verb":
+		job.SendMessage(verbMessage)
+		return
+	}
+
+	if job.waitingState == waitingForStart ||
+		job.waitingState == waitingForCheck ||
+		job.waitingState == waitingForAnswer {
+		if message == "/stop" {
+			job.SendMessage(stopMessage)
+			job.waitingState = waitingForAnything
+			return
+		}
 	}
 
 	switch job.waitingState {
@@ -107,8 +143,8 @@ func (job *UserJob) ProcessMessage(message string) {
 		} else {
 			job.SendMessage(helpMessage)
 		}
-	case waitingForGo:
-		if message == "/go" {
+	case waitingForCheck:
+		if message == "/check" {
 			job.SendSticker()
 			job.SendQuestion()
 		} else {
@@ -118,6 +154,10 @@ func (job *UserJob) ProcessMessage(message string) {
 		job.CheckAnswers(message)
 	case waitingForAudio:
 		job.SendAudio(message)
+	case waitingForNoun:
+		job.SendNoun(message)
+	case waitingForAnything:
+		job.SendMessage(helpMessage)
 	}
 
 }
@@ -137,7 +177,7 @@ func (job *UserJob) SendNewWords() {
 		job.SendMessage(message)
 		job.currentNouns = append(job.currentNouns, noun)
 	}
-	job.waitingState = waitingForGo
+	job.waitingState = waitingForCheck
 	job.SendMessage(readyMessage)
 }
 
@@ -170,6 +210,7 @@ func (job *UserJob) CheckAnswers(message string) {
 
 func (job *UserJob) SendMessage(text string) {
 	message := tgbotapi.NewMessage(job.chatID, text)
+	message.ReplyMarkup = job.modeChoiceKeyboard
 	job.controls.telegramBot.Send(message)
 }
 
@@ -196,7 +237,19 @@ func (job *UserJob) SendAudio(message string) {
 	)
 
 	job.controls.telegramBot.Send(msg)
-	job.RestoreWaitingState()
+	job.waitingState = waitingForAnything
+}
+
+func (job *UserJob) SendNoun(message string) {
+	job.waitingState = waitingForAnything
+	infos := getNounInfo(message)
+	if len(infos) <= 1 {
+		job.SendMessage(noNounMessage)
+		return
+	}
+	for _, info := range infos {
+		job.SendMessage(info)
+	}
 }
 
 func (job *UserJob) SaveState() {
@@ -209,14 +262,6 @@ func (job *UserJob) CheckUserExists() bool {
 		return false
 	}
 	return true
-}
-
-func (job *UserJob) SaveWaitingState() {
-	job.prevWaitingState = job.waitingState
-}
-
-func (job *UserJob) RestoreWaitingState() {
-	job.waitingState = job.prevWaitingState
 }
 
 // Reservoir sampling

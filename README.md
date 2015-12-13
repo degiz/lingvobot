@@ -3,7 +3,10 @@
 A bot for Telegram messenger that helps you to learn some foreign words.
 Implemented in go, packed with a Dockerfile to build yet another container.
 
-For now, it's designed to help you with german nouns and articles, look into nouns.txt for examples.
+For now, it's designed to help you with german nouns and articles.
+
+Lingvobot can show you an article, plural form and all the casuses of a noun. For now it uses [wiktionary](https://de.wiktionary.org) for that.
+
 Lingvobot shows you some nouns with a translation and an article, then asks you questions with a custom "german articles" keyboard.
 
 Also the Lingvobot can send you pronunciation of any text as an audio file, for now it uses [ivona](https://www.ivona.com) for that.

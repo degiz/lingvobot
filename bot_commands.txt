@@ -1,0 +1,8 @@
+train - starts nouns training
+audio - sends you pronunciation
+noun - sends you noun info
+verb - sends you verb info
+help - prints this message
+start - starts training
+check - checks your knowledges while training
+stop - stops training
