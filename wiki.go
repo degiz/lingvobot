@@ -86,19 +86,59 @@ func initWikiRegexps() *WikiRegexps {
 			name: regex["name"], value: compiledRegex})
 	}
 
+	verbInfoRegexps := []nounsRegex{
+		nounsRegex{
+			"name":   "[Präsens ich]",
+			"regexp": "\\|Präsens_ich=(\\S*\\b)",
+		},
+		nounsRegex{
+			"name":   "[Präsens du]",
+			"regexp": "\\|Präsens_du=(\\S*\\b)",
+		},
+		nounsRegex{
+			"name":   "[Präsens er,sie,es]",
+			"regexp": "\\|Präsens_er, sie, es=(\\S*\\b)",
+		},
+		nounsRegex{
+			"name":   "[Präteritum ich]",
+			"regexp": "\\|Präteritum_ich=(\\S*\\b)",
+		},
+		nounsRegex{
+			"name":   "[Partizip II]",
+			"regexp": "\\|Partizip II=(\\S*\\b)",
+		},
+		nounsRegex{
+			"name":   "[Konjunktiv II ich]",
+			"regexp": "\\|Konjunktiv II_ich=(\\S*\\b)",
+		},
+		nounsRegex{
+			"name":   "[Imperativ Singular]",
+			"regexp": "\\|Imperativ Singular=(\\S*\\b)",
+		},
+		nounsRegex{
+			"name":   "[Imperativ Singular*]",
+			"regexp": "\\|Imperativ Singular(?:\\*?)=(\\S*\\b)",
+		},
+		nounsRegex{
+			"name":   "[Imperativ Plural]",
+			"regexp": "\\|Imperativ Plural=(\\S*\\b)",
+		},
+	}
+
+	for _, regex := range verbInfoRegexps {
+		compiledRegex, _ := regexp.Compile(regex["regexp"])
+		result.verbInfo = append(result.verbInfo, Regexp{
+			name: regex["name"], value: compiledRegex})
+	}
+
 	return &result
 }
 
-func getNounInfo(noun string, wikiRegexps *WikiRegexps) []string {
-
-	var result []string
-
+func makeWikiRequest(word string) string {
+	result := ""
 	template := "https://de.wiktionary.org/w/api.php?action=query&prop=revisions&rvprop=content&format=xml&"
 
-	templateWiki := "https://de.wiktionary.org/wiki"
-
-	query := template + "titles=" + strings.Title(noun)
-	queryWiki := templateWiki + "/" + strings.Title(noun)
+	query := template + "titles=" + word
 
 	resp, err := http.Get(query)
 	if err != nil {
@@ -113,12 +153,47 @@ func getNounInfo(noun string, wikiRegexps *WikiRegexps) []string {
 	}
 	path := xmlpath.MustCompile("/api/query/pages/page/revisions/rev")
 
-	wiki, ok := path.String(root)
-	if !ok {
+	result, _ = path.String(root)
+	return result
+}
+
+func getNounInfo(noun string, wikiRegexps *WikiRegexps) []string {
+
+	var result []string
+
+	templateWiki := "https://de.wiktionary.org/wiki"
+	queryWiki := templateWiki + "/" + strings.Title(noun)
+
+	wiki := makeWikiRequest(strings.Title(noun))
+	if wiki == "" {
 		return result
 	}
 
 	for _, regex := range wikiRegexps.nounInfo {
+		match := submatchTextWithRegex(wiki, regex.value)
+		text := fmt.Sprintf("%s: %s", regex.name, strings.Join(match[:], ", "))
+		result = append(result, text)
+	}
+
+	result = append(result, queryWiki)
+
+	return result
+
+}
+
+func getVerbInfo(verb string, wikiRegexps *WikiRegexps) []string {
+
+	var result []string
+
+	templateWiki := "https://de.wiktionary.org/wiki"
+	queryWiki := templateWiki + "/" + strings.ToLower(verb)
+
+	wiki := makeWikiRequest(strings.ToLower(verb))
+	if wiki == "" {
+		return result
+	}
+
+	for _, regex := range wikiRegexps.verbInfo {
 		match := submatchTextWithRegex(wiki, regex.value)
 		text := fmt.Sprintf("%s: %s", regex.name, strings.Join(match[:], ", "))
 		result = append(result, text)

@@ -32,9 +32,9 @@ Enjoy!`
 
 	nounMessage = "Ok, send me noun you'd like to learn!"
 
-	noNounMessage = "Sorry, didn't find anything.."
+	verbMessage = "Ok, send me verb you'd like to learn!"
 
-	verbMessage = "Sorry, verbs are not yet implemented.."
+	notFoundMessage = "Sorry, didn't find anything.."
 
 	readyMessage     = "Press /check once you're ready"
 	correctMessage   = "Genau!"
@@ -48,6 +48,7 @@ const (
 	waitingForAnswer   = iota
 	waitingForAudio    = iota
 	waitingForNoun     = iota
+	waitingForVerb     = iota
 )
 
 type UserJob struct {
@@ -117,15 +118,16 @@ func (job *UserJob) ProcessMessage(message string) {
 		job.waitingState = waitingForStart
 		return
 	case "/noun":
-		job.SendMessage(nounMessage)
+		job.SendMessageNoKeyboard(nounMessage)
 		job.waitingState = waitingForNoun
 		return
 	case "/audio":
-		job.SendMessage(audioMessage)
+		job.SendMessageNoKeyboard(audioMessage)
 		job.waitingState = waitingForAudio
 		return
 	case "/verb":
-		job.SendMessage(verbMessage)
+		job.SendMessageNoKeyboard(verbMessage)
+		job.waitingState = waitingForVerb
 		return
 	}
 
@@ -159,6 +161,8 @@ func (job *UserJob) ProcessMessage(message string) {
 		job.SendAudio(message)
 	case waitingForNoun:
 		job.SendNoun(message)
+	case waitingForVerb:
+		job.SendVerb(message)
 	case waitingForAnything:
 		job.SendMessage(helpMessage)
 	}
@@ -217,6 +221,15 @@ func (job *UserJob) SendMessage(text string) {
 	job.controls.telegramBot.Send(message)
 }
 
+func (job *UserJob) SendMessageNoKeyboard(text string) {
+	message := tgbotapi.NewMessage(job.chatID, text)
+	job.DoSendMessage(message)
+}
+
+func (job *UserJob) DoSendMessage(message tgbotapi.MessageConfig) {
+	job.controls.telegramBot.Send(message)
+}
+
 func (job *UserJob) SendSticker() {
 	// message := tgbotapi.NewStickerUpload(chatID, file)
 	// job.controls.telegramBot.Send(message)
@@ -247,7 +260,19 @@ func (job *UserJob) SendNoun(message string) {
 	job.waitingState = waitingForAnything
 	infos := getNounInfo(message, job.wikiRegexps)
 	if len(infos) <= 1 {
-		job.SendMessage(noNounMessage)
+		job.SendMessage(notFoundMessage)
+		return
+	}
+	for _, info := range infos {
+		job.SendMessage(info)
+	}
+}
+
+func (job *UserJob) SendVerb(message string) {
+	job.waitingState = waitingForAnything
+	infos := getVerbInfo(message, job.wikiRegexps)
+	if len(infos) <= 1 {
+		job.SendMessage(notFoundMessage)
 		return
 	}
 	for _, info := range infos {

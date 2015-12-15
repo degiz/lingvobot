@@ -7,9 +7,12 @@ For now, it's designed to help you with german nouns and articles.
 
 Lingvobot can show you an article, plural form and all the casuses of a noun. For now it uses [wiktionary](https://de.wiktionary.org) for that.
 
-Lingvobot shows you some nouns with a translation and an article, then asks you questions with a custom "german articles" keyboard.
+Actually, Lingvobot can show you information about verbs as well, using the same [wiktionary](https://de.wiktionary.org)
 
 Also the Lingvobot can send you pronunciation of any text as an audio file, for now it uses [ivona](https://www.ivona.com) for that.
+
+And, of course, Lingvobot can be a new-words-learning couch: it shows you some nouns with a translation and an article, then asks you questions with a custom "german articles" keyboard.
+
 
 The Makefile expects you to set up:
 * TELEGRAM_BOT_TOKEN environment variable with an Telegram bot API token.
