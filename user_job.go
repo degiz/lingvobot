@@ -57,6 +57,7 @@ type UserJob struct {
 	modeChoiceKeyboard tgbotapi.ReplyKeyboardMarkup
 	keyboard           tgbotapi.ReplyKeyboardMarkup
 	waitingState       int
+	wikiRegexps        *WikiRegexps
 
 	// training mode variables
 	currentNouns   []Noun
@@ -99,6 +100,8 @@ func (job *UserJob) init() {
 	job.keyboard.OneTimeKeyboard = true
 	job.keyboard.ResizeKeyboard = true
 	job.keyboard.Keyboard = buttons
+
+	job.wikiRegexps = initWikiRegexps()
 
 	job.waitingState = waitingForAnything
 }
@@ -242,7 +245,7 @@ func (job *UserJob) SendAudio(message string) {
 
 func (job *UserJob) SendNoun(message string) {
 	job.waitingState = waitingForAnything
-	infos := getNounInfo(message)
+	infos := getNounInfo(message, job.wikiRegexps)
 	if len(infos) <= 1 {
 		job.SendMessage(noNounMessage)
 		return

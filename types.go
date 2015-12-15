@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/Syfaro/telegram-bot-api"
+	"regexp"
 )
 
 type Noun struct {
@@ -10,6 +11,16 @@ type Noun struct {
 	Article     string
 	Noun        string
 	Translation string
+}
+
+type Regexp struct {
+	name  string
+	value *regexp.Regexp
+}
+
+type WikiRegexps struct {
+	nounInfo []Regexp
+	verbInfo []Regexp
 }
 
 type UserState struct {

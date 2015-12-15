@@ -23,40 +23,75 @@ func convertArticle(symbol string) string {
 	return ""
 }
 
-func getNounInfo(noun string) []string {
+func submatchTextWithRegex(text string, inRegex *regexp.Regexp) []string {
+	var result []string
+	submatches := inRegex.FindAllStringSubmatch(text, -1)
+	if submatches == nil {
+		return result
+	}
+	for _, submatch := range submatches {
+		result = append(result, submatch[1])
+	}
+	return result
+}
 
+func initWikiRegexps() *WikiRegexps {
+
+	var result WikiRegexps
 	type nounsRegex map[string]string
 
-	var finalResult []string
+	// We keep it separated in case the format changes
+	nounInfoRegexps := []nounsRegex{
+		nounsRegex{
+			"name":   "[Gn]",
+			"regexp": "\\|Genus=(\\w)",
+		},
+		nounsRegex{
+			"name":   "[NS]",
+			"regexp": "\\|Nominativ Singular(?:.*)=(.*\\b)",
+		},
+		nounsRegex{
+			"name":   "[NP]",
+			"regexp": "\\|Nominativ Plural(?:.*)=(.*\\b)",
+		},
+		nounsRegex{
+			"name":   "[AS]",
+			"regexp": "\\|Akkusativ Singular(?:.*)=(.*\\b)",
+		},
+		nounsRegex{
+			"name":   "[AP]",
+			"regexp": "\\|Akkusativ Plural(?:.*)=(.*\\b)",
+		},
+		nounsRegex{
+			"name":   "[DS]",
+			"regexp": "\\|Dativ Singular(?:.*)=(.*\\b)",
+		},
+		nounsRegex{
+			"name":   "[DP]",
+			"regexp": "\\|Dativ Plural(?:.*)=(.*\\b)",
+		},
+		nounsRegex{
+			"name":   "[GS]",
+			"regexp": "\\|Genitiv Singular(?:.*)=(.*\\b)",
+		},
+		nounsRegex{
+			"name":   "[GP]",
+			"regexp": "\\|Genitiv Plural(?:.*)=(.*\\b)",
+		},
+	}
 
-	var nouns []nounsRegex
-	nouns = append(nouns, nounsRegex{
-		"name":   "Gender",
-		"regexp": "\\|Genus=(\\w)"})
-	nouns = append(nouns, nounsRegex{
-		"name":   "Nominativ Singular",
-		"regexp": "\\|Nominativ Singular(?:.*)=(.*\\b)"})
-	nouns = append(nouns, nounsRegex{
-		"name":   "Nominativ Plural",
-		"regexp": "\\|Nominativ Plural(?:.*)=(.*\\b)"})
-	nouns = append(nouns, nounsRegex{
-		"name":   "Akkusativ Singular",
-		"regexp": "\\|Akkusativ Singular(?:.*)=(.*\\b)"})
-	nouns = append(nouns, nounsRegex{
-		"name":   "Akkusativ Plural",
-		"regexp": "\\|Akkusativ Plural(?:.*)=(.*\\b)"})
-	nouns = append(nouns, nounsRegex{
-		"name":   "Dativ Singular",
-		"regexp": "\\|Dativ Singular(?:.*)=(.*\\b)"})
-	nouns = append(nouns, nounsRegex{
-		"name":   "Dativ Plural",
-		"regexp": "\\|Dativ Plural(?:.*)=(.*\\b)"})
-	nouns = append(nouns, nounsRegex{
-		"name":   "Genitiv Singular",
-		"regexp": "\\|Genitiv Singular(?:.*)=(.*\\b)"})
-	nouns = append(nouns, nounsRegex{
-		"name":   "Genitiv Plural",
-		"regexp": "\\|Genitiv Plural(?:.*)=(.*\\b)"})
+	for _, regex := range nounInfoRegexps {
+		compiledRegex, _ := regexp.Compile(regex["regexp"])
+		result.nounInfo = append(result.nounInfo, Regexp{
+			name: regex["name"], value: compiledRegex})
+	}
+
+	return &result
+}
+
+func getNounInfo(noun string, wikiRegexps *WikiRegexps) []string {
+
+	var result []string
 
 	template := "https://de.wiktionary.org/w/api.php?action=query&prop=revisions&rvprop=content&format=xml&"
 
@@ -68,37 +103,29 @@ func getNounInfo(noun string) []string {
 	resp, err := http.Get(query)
 	if err != nil {
 		log.Println("Error processing query:", err)
-		return finalResult
+		return result
 	}
 	defer resp.Body.Close()
 
 	root, err := xmlpath.Parse(resp.Body)
 	if err != nil {
-		return finalResult
+		return result
 	}
 	path := xmlpath.MustCompile("/api/query/pages/page/revisions/rev")
 
 	wiki, ok := path.String(root)
 	if !ok {
-		return finalResult
+		return result
 	}
 
-	for _, noun := range nouns {
-		var result []string
-		regex, _ := regexp.Compile(noun["regexp"])
-		submatches := regex.FindAllStringSubmatch(wiki, -1)
-		if submatches == nil {
-			continue
-		}
-		for _, submatch := range submatches {
-			result = append(result, submatch[1])
-		}
-		text := fmt.Sprintf("%s: %v", noun["name"], result)
-		finalResult = append(finalResult, text)
+	for _, regex := range wikiRegexps.nounInfo {
+		match := submatchTextWithRegex(wiki, regex.value)
+		text := fmt.Sprintf("%s: %s", regex.name, strings.Join(match[:], ", "))
+		result = append(result, text)
 	}
 
-	finalResult = append(finalResult, queryWiki)
+	result = append(result, queryWiki)
 
-	return finalResult
+	return result
 
 }
